@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Controller Monopoli Nusantara</title>
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body { --player-color:#0f766e; margin:0; min-height:100vh; font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif; color:#f8fafc; background:radial-gradient(circle at top left,var(--player-color) 0,#0f172a 42%,#020617 100%); padding:18px; transition:background .35s ease; }
+    .container { width:100%; max-width:460px; margin:0 auto; }
+    .card { background:rgba(15,23,42,.88); border:1px solid rgba(148,163,184,.22); border-radius:22px; padding:18px; margin-bottom:16px; box-shadow:0 18px 40px rgba(0,0,0,.28); }
+    h1,h2,h3,h4 { margin:0; } h4 { margin-bottom:10px; }
+    .eyebrow { color:#67e8f9; font-size:12px; font-weight:800; letter-spacing:2px; text-transform:uppercase; }
+    input { width:100%; margin:8px 0 14px; padding:14px; border-radius:14px; border:1px solid rgba(148,163,184,.35); background:rgba(2,6,23,.7); color:white; font-size:16px; }
+    button { width:100%; border:0; border-radius:16px; padding:14px 16px; color:white; font-size:15px; font-weight:900; background:linear-gradient(135deg,#ef4444,#dc2626); box-shadow:0 10px 22px rgba(220,38,38,.3); }
+    button:disabled { opacity:.45; filter:grayscale(1); box-shadow:none; }
+    .primary { background:linear-gradient(135deg,#22c55e,#16a34a); box-shadow:0 10px 22px rgba(22,163,74,.3); }
+    .secondary { background:#334155; box-shadow:none; }
+    #setup-screen,#game-screen { display:none; } #setup-screen.active,#game-screen.active { display:block; }
+    .balance { margin:10px 0 2px; font-size:36px; font-weight:950; color:#86efac; line-height:1; }
+    .muted { color:#94a3b8; font-size:13px; } .status { min-height:22px; margin-top:10px; color:#fbbf24; }
+    .row { display:flex; gap:10px; } .pill { display:inline-flex; align-items:center; gap:6px; border-radius:999px; padding:7px 10px; background:rgba(148,163,184,.15); color:#cbd5e1; font-size:12px; font-weight:700; }
+    .assets,.logs,.tx { display:grid; gap:8px; } .logs,.tx { max-height:170px; overflow-y:auto; font-size:12px; color:#cbd5e1; text-align:left; }
+    .complex { border-radius:16px; background:rgba(2,6,23,.45); overflow:hidden; border:1px solid rgba(148,163,184,.18); }
+    .complex-title { padding:9px 12px; font-weight:900; font-size:12px; color:#0f172a; }
+    .asset { padding:11px 12px; border-top:1px solid rgba(148,163,184,.12); text-align:left; cursor:pointer; }
+    .detail { display:none; margin-top:10px; padding:10px; background:rgba(15,23,42,.9); border-radius:12px; }
+    .detail.open { display:block; }
+    table { width:100%; border-collapse:collapse; font-size:12px; } td { padding:4px 0; border-bottom:1px solid rgba(148,163,184,.14); }
+    .prompt { border:2px solid #22c55e; animation:pop .18s ease-out; } @keyframes pop { from{transform:scale(.98);opacity:.6} to{transform:scale(1);opacity:1} }
+    .bankrupt { border:2px solid #ef4444; background:rgba(127,29,29,.55); }
+    .quick-bids { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin:10px 0; }
+    .rules-modal { position:fixed; inset:0; display:none; background:rgba(2,6,23,.78); padding:18px; z-index:10; overflow:auto; }
+    .rules-modal.open { display:block; }
+    .rules-content { max-width:680px; margin:0 auto; background:#0f172a; border:1px solid rgba(148,163,184,.35); border-radius:22px; padding:18px; }
+    .rules-content li { margin-bottom:8px; color:#cbd5e1; }
+  </style>
+</head>
+<body>
+  <main class="container">
+    <section id="setup-screen" class="active">
+      <div class="card">
+        <div class="eyebrow">Monopoli Nusantara</div>
+        <h1>Masuk sebagai pemain</h1>
+        <p class="muted">Masukkan IP dan PIN yang tampil di TV. Maksimal 8 pemain.</p>
+        <label class="muted" for="tv-ip">IP Google TV</label>
+        <input id="tv-ip" placeholder="192.168.1.x:8080">
+        <label class="muted" for="room-pin">PIN Room</label>
+        <input id="room-pin" inputmode="numeric" maxlength="4" placeholder="1234">
+        <label class="muted" for="player-name">Nama pemain</label>
+        <input id="player-name" placeholder="Nama kamu">
+        <button id="btn-connect" class="primary">Sambungkan ke TV</button>
+        <div id="connection-status" class="status"></div>
+      </div>
+    </section>
+
+    <section id="game-screen">
+      <div class="card">
+        <div class="eyebrow">Controller Pemain</div>
+        <h2 id="display-name">Pemain</h2>
+        <div id="display-balance" class="balance">Rp0</div>
+        <div class="row"><span id="turn-pill" class="pill">⏳ Menunggu</span><span id="position-pill" class="pill">📍 MULAI</span></div>
+      </div>
+      <button id="btn-roll-dice" disabled>🎲 LEMPAR DADU</button>
+      <button id="btn-rules" class="secondary" style="margin:12px 0">📖 ATURAN GAME</button>
+
+      <div id="action-prompt" class="card prompt" style="display:none; margin-top:16px;">
+        <div class="eyebrow">Aksi</div>
+        <h3 id="prompt-title">Beli properti?</h3>
+        <p id="prompt-text" class="muted"></p>
+        <div id="buy-actions" class="row"><button id="btn-buy" class="primary">BELI</button><button id="btn-skip" class="secondary">LELANG</button></div>
+        <div id="auction-actions" style="display:none;">
+          <div id="quick-bids" class="quick-bids"></div>
+          <input id="bid-amount" inputmode="numeric" placeholder="Nominal custom (opsional)">
+          <button id="btn-bid" class="primary">BID</button>
+          <p id="auction-info" class="muted"></p>
+        </div>
+      </div>
+
+      <div class="card"><h4>Aset Saya</h4><div id="assets" class="assets"><div class="muted">Belum punya aset.</div></div></div>
+      <div class="card"><h4>Riwayat Uang Saya</h4><div id="transactions" class="tx"><div>Belum ada transaksi.</div></div></div>
+      <div class="card"><h4>Riwayat Game</h4><div id="logs" class="logs"><div>Menunggu data dari TV...</div></div></div>
+    </section>
+  </main>
+
+  <div id="rules-modal" class="rules-modal">
+    <div class="rules-content">
+      <h2>Aturan Monopoli Nusantara</h2>
+      <ul>
+        <li>Tujuan game: menjadi pemain terakhir yang tidak bangkrut.</li>
+        <li>Setiap pemain mulai dengan Rp15.000.000.</li>
+        <li>Melewati MULAI memberi Rp2.000.000.</li>
+        <li>Properti kosong bisa dibeli atau dilelang.</li>
+        <li>Lelang dimulai dari harga tanah. Bid harus valid dan saldo harus cukup.</li>
+        <li>Jika mendarat di properti lawan, bayar sewa sesuai level bangunan.</li>
+        <li>Jika punya semua properti satu komplek warna, sewa tanah menjadi 2x.</li>
+        <li>Rumah/hotel hanya bisa dibangun jika punya komplek warna lengkap.</li>
+        <li>Bangun dan jual bangunan harus merata dalam satu komplek warna.</li>
+        <li>Bangunan bisa dijual kapan saja ke Bank senilai 50% harga beli.</li>
+        <li>Double memberi giliran tambahan. Tiga kali double berturut-turut masuk penjara.</li>
+        <li>Keluar penjara dengan double, kartu bebas penjara, atau bayar denda.</li>
+        <li>Kesempatan dan Dana Umum berisi 16 kartu masing-masing.</li>
+        <li>Jika HP mati/Wi-Fi putus, buka ulang web dengan IP/PIN yang sama untuk reconnect.</li>
+        <li>Jika AFK saat giliran selama 45 detik, Bank melewati giliran pemain.</li>
+      </ul>
+      <button id="btn-close-rules" class="primary">Tutup</button>
+    </div>
+  </div>
+
+  <script>
+    let ws = null, playerId = null, latestState = null, currentAuction = null;
+    const $ = id => document.getElementById(id);
+    const setupScreen=$('setup-screen'), gameScreen=$('game-screen'), tvIpInput=$('tv-ip'), pinInput=$('room-pin'), playerNameInput=$('player-name'), statusDiv=$('connection-status'), rulesModal=$('rules-modal');
+    const displayName=$('display-name'), displayBalance=$('display-balance'), turnPill=$('turn-pill'), positionPill=$('position-pill'), btnRollDice=$('btn-roll-dice');
+    const actionPrompt=$('action-prompt'), promptTitle=$('prompt-title'), promptText=$('prompt-text'), btnBuy=$('btn-buy'), btnSkip=$('btn-skip'), buyActions=$('buy-actions'), auctionActions=$('auction-actions'), quickBids=$('quick-bids'), bidAmount=$('bid-amount'), btnBid=$('btn-bid'), auctionInfo=$('auction-info');
+    const assetsDiv=$('assets'), logsDiv=$('logs'), txDiv=$('transactions');
+    const rentNames=['Tanah','1 Rumah','2 Rumah','3 Rumah','4 Rumah','Hotel'];
+    const groupNames={BROWN:'Komplek Cokelat',LIGHTBLUE:'Komplek Biru Muda',PINK:'Komplek Merah Muda',ORANGE:'Komplek Oranye',RED:'Komplek Merah',YELLOW:'Komplek Kuning',GREEN:'Komplek Hijau',DARKBLUE:'Komplek Biru Tua'};
+    function money(v){return 'Rp'+Number(v||0).toLocaleString('id-ID')}
+    function groupColor(g){return ({BROWN:'#8B5A2B',LIGHTBLUE:'#38BDF8',PINK:'#EC4899',ORANGE:'#F97316',RED:'#EF4444',YELLOW:'#FACC15',GREEN:'#22C55E',DARKBLUE:'#2563EB'})[g]||'#64748b'}
+    function send(type,payload={}){ if(ws&&ws.readyState===WebSocket.OPEN) ws.send(JSON.stringify({type,payload})) }
+    function renderState(state){
+      latestState=state; const me=state.players.find(p=>p.id===playerId); if(!me)return; const tile=state.properties[me.position];
+      document.body.style.setProperty('--player-color', me.color || '#0f766e');
+      displayBalance.textContent=money(me.balance); positionPill.textContent=`📍 ${tile.name} • 🎫 ${me.getOutOfJailCards||0}`; logsDiv.innerHTML=[...state.logs].reverse().map(l=>`<div>• ${l}</div>`).join('');
+      if(me.isBankrupt){turnPill.textContent=`💀 Bangkrut: ${me.bankruptcyReason||'saldo negatif'}`; document.querySelector('#game-screen > .card').classList.add('bankrupt'); btnRollDice.disabled=true;} else {document.querySelector('#game-screen > .card').classList.remove('bankrupt');}
+      txDiv.innerHTML=(me.transactions&&me.transactions.length)?[...me.transactions].reverse().map(t=>`<div>• ${t}</div>`).join(''):'<div>Belum ada transaksi.</div>';
+      renderAssets(state, me); const myTurn=!me.isBankrupt&&state.currentTurnPlayerId===playerId&&state.phase==='TURN_START'; btnRollDice.disabled=!myTurn; if(!me.isBankrupt) turnPill.textContent=myTurn?`✅ Giliran kamu (${state.turnSecondsLeft}s)`:state.phase==='LOBBY'?'🏁 Tunggu TV mulai':'⏳ Menunggu';
+      if(state.phase!=='ACTION_REQUIRED'&&state.phase!=='AUCTION') actionPrompt.style.display='none';
+      if(state.phase==='AUCTION'&&state.auction) showAuction(state.auction,state.properties[state.auction.propertyId]);
+    }
+    function renderAssets(state, me){
+      const myAssets=state.properties.filter(p=>p.ownerId===playerId); if(!myAssets.length){assetsDiv.innerHTML='<div class="muted">Belum punya aset.</div>';return}
+      const groups={}; myAssets.forEach(p=>{const key=p.group||p.type; (groups[key]??=[]).push(p)});
+      assetsDiv.innerHTML=Object.entries(groups).map(([g,items])=>`<div class="complex"><div class="complex-title" style="background:${groupColor(g)}">${groupNames[g]||g}</div>${items.map(p=>assetHtml(state,p)).join('')}</div>`).join('');
+      document.querySelectorAll('[data-build]').forEach(btn=>btn.onclick=()=>send('REQ_BUILD',{playerId,propertyId:Number(btn.dataset.build)}));
+      document.querySelectorAll('[data-sell-building]').forEach(btn=>btn.onclick=()=>send('REQ_SELL_BUILDING',{playerId,propertyId:Number(btn.dataset.sellBuilding)}));
+    }
+    function assetHtml(state,p){
+      const rentRows=(p.rent||[]).map((r,i)=>`<tr><td>${rentNames[i]||'Level '+i}</td><td>${money(r)}</td></tr>`).join('');
+      const sameGroup=state.properties.filter(x=>x.group===p.group); const ownsSet=p.group&&sameGroup.every(x=>x.ownerId===playerId); const canBuild=p.type==='STREET'&&ownsSet&&p.level<5;
+      const canSell=p.type==='STREET'&&p.level>0;
+      return `<div class="asset" onclick="this.querySelector('.detail').classList.toggle('open')"><b>${p.name}</b><br><span class="muted">${p.type} • Level ${p.level||0} • Harga bangun ${money(p.houseCost||0)} • Jual bangunan ${money((p.houseCost||0)/2)}</span><div class="detail"><table>${rentRows}</table>${canBuild?`<button data-build="${p.id}" class="primary" style="margin-top:10px">Bangun ${p.level>=4?'Hotel':'Rumah'}</button>`:`<p class="muted">${p.type==='STREET'?'Butuh komplek lengkap dan bangun merata untuk menaikkan sewa.':'Tidak bisa dibangun rumah/hotel.'}</p>`}${canSell?`<button data-sell-building="${p.id}" class="secondary" style="margin-top:8px">Jual Bangunan ke Bank</button>`:''}</div></div>`;
+    }
+    function showBuy(prop){ currentAuction=null; promptTitle.textContent=`Beli ${prop.name}?`; promptText.textContent=`Harga ${money(prop.price)}. Jika tidak dibeli, properti akan dilelang untuk semua pemain.`; buyActions.style.display='flex'; auctionActions.style.display='none'; actionPrompt.style.display='block'; }
+    function showAuction(auction, prop){ currentAuction=auction; const me=latestState.players.find(p=>p.id===playerId); const hasBidder=!!auction.highestBidderId; const min=hasBidder?auction.highestBid+100000:auction.highestBid; promptTitle.textContent=`Lelang ${prop.name} • ${latestState.auctionSecondsLeft}s`; promptText.textContent=`Bid tertinggi: ${money(auction.highestBid)}. Pemenang: ${auction.highestBidderId||'-'}.`; buyActions.style.display='none'; auctionActions.style.display='block'; quickBids.innerHTML=[min,min+500000,min+1000000,min+2000000].filter(v=>v<=me.balance).map(v=>`<button class="secondary" data-quick-bid="${v}">${money(v)}</button>`).join('') || '<p class="muted">Saldo tidak cukup untuk bid.</p>'; document.querySelectorAll('[data-quick-bid]').forEach(b=>b.onclick=()=>send('REQ_BID',{playerId,amount:Number(b.dataset.quickBid)})); auctionInfo.textContent='Pilih nominal cepat, atau isi custom jika perlu. Timer reset setelah bid valid.'; actionPrompt.style.display='block'; }
+    function handleServerMessage(data){
+      if(data.type==='RESET'){ location.reload(); return; }
+      if(data.type==='JOIN_ERROR'){ statusDiv.textContent=data.payload.message; return; }
+      if(data.type==='RES_JOIN_SUCCESS'){ playerId=data.payload.playerId; const pin=pinInput.value.trim(); localStorage.setItem('vowsMonopoly_'+pin,playerId); displayName.textContent=playerNameInput.value.trim()||'Pemain'; setupScreen.classList.remove('active'); gameScreen.classList.add('active'); statusDiv.textContent=data.payload.reconnected?'Tersambung kembali.':''; return; }
+      if(data.type==='SYNC_STATE'){ if(playerId) renderState(data.payload); return; }
+      if(data.type==='PROMPT_ACTION'&&data.payload.type==='BUY_OR_SKIP') showBuy(data.payload.property);
+      if(data.type==='PROMPT_ACTION'&&data.payload.type==='AUCTION') showAuction(data.payload.auction,data.payload.property);
+    }
+    function doConnect(ip, name, pin, savedPlayerId) {
+      statusDiv.textContent='Menyambungkan...';
+      try {
+        ws = new WebSocket(`ws://${ip}`);
+        ws.onopen = () => send('REQ_JOIN', {playerName:name, pin, playerId:savedPlayerId});
+        ws.onmessage = e => handleServerMessage(JSON.parse(e.data));
+        ws.onclose = () => {
+          if (gameScreen.classList.contains('active')) {
+            statusDiv.textContent='Koneksi terputus. Mencoba reconnect...';
+            setupScreen.classList.add('active');
+            gameScreen.classList.remove('active');
+          } else {
+            statusDiv.textContent='Koneksi terputus.';
+          }
+          setTimeout(() => {
+            if (!ws || ws.readyState !== WebSocket.OPEN) doConnect(ip, name, pin, localStorage.getItem('vowsMonopoly_'+pin)||savedPlayerId);
+          }, 3000);
+        };
+        ws.onerror = () => statusDiv.textContent='Gagal konek. Pastikan satu Wi-Fi dan PIN benar.';
+      } catch(e) { statusDiv.textContent='Format IP tidak valid.'; }
+    }
+    $('btn-connect').onclick=()=>{ const ip=tvIpInput.value.trim(), name=playerNameInput.value.trim(), pin=pinInput.value.trim(), savedPlayerId=localStorage.getItem('vowsMonopoly_'+pin)||''; if(!ip||!name||!pin){statusDiv.textContent='Isi IP, PIN, dan nama.';return} doConnect(ip, name, pin, savedPlayerId); };
+    const params=new URLSearchParams(location.search); if(params.get('ip')) tvIpInput.value=params.get('ip'); if(params.get('pin')) pinInput.value=params.get('pin');
+    bidAmount.oninput=()=>{ const raw=bidAmount.value.replace(/\D/g,''); bidAmount.value=raw?Number(raw).toLocaleString('id-ID'):''; };
+    $('btn-rules').onclick=()=>rulesModal.classList.add('open'); $('btn-close-rules').onclick=()=>rulesModal.classList.remove('open');
+    btnRollDice.onclick=()=>send('REQ_ROLL_DICE',{playerId}); btnBuy.onclick=()=>{actionPrompt.style.display='none';send('REQ_BUY_PROPERTY',{playerId})}; btnSkip.onclick=()=>send('REQ_SKIP_BUY',{playerId}); btnBid.onclick=()=>{ const amount=Number(String(bidAmount.value).replace(/\D/g,'')); const me=latestState.players.find(p=>p.id===playerId); const hasBidder=!!currentAuction.highestBidderId; if(!amount||amount>me.balance||(hasBidder?amount<=currentAuction.highestBid:amount<currentAuction.highestBid)){auctionInfo.textContent='Bid tidak valid: minimal harga tanah/lebih tinggi dan saldo cukup.';return} send('REQ_BID',{playerId,amount}); bidAmount.value=''; };
+  </script>
+</body>
+</html>
